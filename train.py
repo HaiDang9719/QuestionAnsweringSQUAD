@@ -27,7 +27,7 @@ DOC_STRIDE = 128
 SAVE_STEPS = 1000
 MAX_SAVE = 5
 model_config = {
-    "num_core_per_host":1,
+    "num_core_per_host":3,
     "model_dir":'experiment/squad',
     "output_dir": 'proc_data/squad',
     "output_dir1": '',
@@ -37,12 +37,16 @@ model_config = {
     "save_steps":1000,
     "max_seq_length":512,
     "max_query_length":64,
-    "train_batch_size":8,
+    "train_batch_size":48,
+    'predict_batch_size':32,
     "train_steps":12000,
     "init_checkpoint":'xlnet_cased_L-24_H-1024_A-16/xlnet_model.ckpt',
     'model_config_path':'xlnet_cased_L-24_H-1024_A-16/xlnet_config.json',
     'use_bfloat16':False,
     'use_tpu':False,
+    'tpu':'grpc://10.85.167.114:8470',
+    'tpu_zone':None,
+    'gcp_project':None,
     'dropout':0.1,
     'dropatt':0.1,
     'init':'normal',
@@ -70,14 +74,21 @@ model_config = {
 
 
 def configure_tpu():
-    tpu_cluster = None
-    master = None
+    tpu_cluster = tf.contrib.cluster_resolver.TPUClusterResolver(
+        model_config['tpu'], zone=model_config['tpu_zone'], project=model_config['gcp_project'])
+    master = tpu_cluster.get_master()
+    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(model_config['tpu'])
+    # tpu_cluster = None
+    # master = None
 
     session_config = tf.ConfigProto(allow_soft_placement=True)
     # Uncomment the following line if you hope to monitor GPU RAM growth
-    # session_config.gpu_options.allow_growth = True
+    #session_config.gpu_options.allow_growth = True
 
-    if model_config['num_core_per_host'] == 1:
+    if model_config['use_tpu']:
+        strategy = None
+        tf.logging.info('Use TPU without distribute strategy.')
+    elif model_config['num_core_per_host'] == 1:
         strategy = None
         tf.logging.info('Single device mode.')
     else:
@@ -88,7 +99,7 @@ def configure_tpu():
 
     per_host_input = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
     run_config = tf.contrib.tpu.RunConfig(
-        master=master,
+        master=None,
         model_dir=model_config['model_dir'],
         session_config=session_config,
         tpu_config=tf.contrib.tpu.TPUConfig(
@@ -272,15 +283,15 @@ def get_model_fn():
 
         #### Constucting training TPUEstimatorSpec with new cache.
         # if FLAGS.use_tpu:
-        #     host_call = function_builder.construct_scalar_host_call(
-        #         monitor_dict=monitor_dict,
-        #         model_dir=FLAGS.model_dir,
-        #         prefix="train/",
-        #         reduce_fn=tf.reduce_mean)
+        # host_call = function_builder.construct_scalar_host_call(
+        #     monitor_dict=monitor_dict,
+        #     model_dir=model_config['model_dir'],
+        #     prefix="train/",
+        #     reduce_fn=tf.reduce_mean)
 
-        #     train_spec = tf.contrib.tpu.TPUEstimatorSpec(
-        #         mode=mode, loss=total_loss, train_op=train_op, host_call=host_call,
-        #         scaffold_fn=scaffold_fn)
+        # train_spec = tf.contrib.tpu.TPUEstimatorSpec(
+        #     mode=mode, loss=total_loss, train_op=train_op, host_call=host_call,
+        #     scaffold_fn=scaffold_fn)
         # else:
         train_spec = tf.estimator.EstimatorSpec(
             mode=mode, loss=total_loss, train_op=train_op)
@@ -299,7 +310,15 @@ def main(_):
     model_fn = get_model_fn()
     spm_basename = _get_spm_basename()
 
+    #TPU
+    # estimator = tf.contrib.tpu.TPUEstimator(
+    #     use_tpu=True,
+    #     model_fn=model_fn,
+    #     config=run_config,
+    #     train_batch_size=model_config['train_batch_size'])
+        # predict_batch_size=model_config['predict_batch_size'])
 
+    #GPU
     estimator = tf.estimator.Estimator(
     model_fn=model_fn,
     config=run_config)
@@ -321,4 +340,4 @@ def main(_):
     estimator.train(input_fn=train_input_fn, max_steps=model_config['train_steps'])
 
 if __name__ == "__main__":
-  tf.app.run()
+    tf.app.run()
