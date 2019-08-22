@@ -603,19 +603,6 @@ class FeatureWriter(object):
     self._writer.close()
 
 
-RawResult = collections.namedtuple("RawResult",
-    ["unique_id", "start_top_log_probs", "start_top_index",
-    "end_top_log_probs", "end_top_index", "cls_logits"])
-
-_PrelimPrediction = collections.namedtuple(  # pylint: disable=invalid-name
-    "PrelimPrediction",
-    ["feature_index", "start_index", "end_index",
-    "start_log_prob", "end_log_prob"])
-
-_NbestPrediction = collections.namedtuple(  # pylint: disable=invalid-name
-    "NbestPrediction", ["text", "start_log_prob", "end_log_prob"])
-
-
 def _get_best_indexes(logits, n_best_size):
   """Get the n-best logits from a list."""
   index_and_score = sorted(enumerate(logits), key=lambda x: x[1], reverse=True)

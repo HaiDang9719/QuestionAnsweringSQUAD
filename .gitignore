@@ -108,4 +108,4 @@ venv.bak/
 experiment/
 proc_data/
 xlnet_cased_L-24_H-1024_A-16/
-spiece.model.0.slen-512.qlen-64.train.tf_record
+*.tf_record

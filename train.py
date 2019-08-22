@@ -52,7 +52,6 @@ model_config = {
     'init':'normal',
     'init_range':0.1,
     'init_std':0.02,
-    'clamp_len':-1,
     'mem_len':None,
     'reuse_len':None,
     'bi_data':False,
@@ -74,16 +73,18 @@ model_config = {
 
 
 def configure_tpu():
-    tpu_cluster = tf.contrib.cluster_resolver.TPUClusterResolver(
-        model_config['tpu'], zone=model_config['tpu_zone'], project=model_config['gcp_project'])
-    master = tpu_cluster.get_master()
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(model_config['tpu'])
-    # tpu_cluster = None
-    # master = None
+    # config tpu
+    # tpu_cluster = tf.contrib.cluster_resolver.TPUClusterResolver(
+    #     model_config['tpu'], zone=model_config['tpu_zone'], project=model_config['gcp_project'])
+    # master = tpu_cluster.get_master()
+    # tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(model_config['tpu'])
+    # config for gpu
+    tpu_cluster = None
+    master = None
 
     session_config = tf.ConfigProto(allow_soft_placement=True)
     # Uncomment the following line if you hope to monitor GPU RAM growth
-    #session_config.gpu_options.allow_growth = True
+    session_config.gpu_options.allow_growth = True
 
     if model_config['use_tpu']:
         strategy = None
@@ -99,7 +100,7 @@ def configure_tpu():
 
     per_host_input = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
     run_config = tf.contrib.tpu.RunConfig(
-        master=None,
+        master=master,
         model_dir=model_config['model_dir'],
         session_config=session_config,
         tpu_config=tf.contrib.tpu.TPUConfig(
