@@ -37,7 +37,7 @@ model_config = {
     "save_steps":1000,
     "max_seq_length":512,
     "max_query_length":64,
-    "train_batch_size":48,
+    "train_batch_size":8,
     'predict_batch_size':32,
     "train_steps":12000,
     "init_checkpoint":'xlnet_cased_L-24_H-1024_A-16/xlnet_model.ckpt',
@@ -82,7 +82,7 @@ def configure_tpu():
     tpu_cluster = None
     master = None
 
-    session_config = tf.ConfigProto(allow_soft_placement=True)
+    session_config = tf.ConfigProto()
     # Uncomment the following line if you hope to monitor GPU RAM growth
     session_config.gpu_options.allow_growth = True
 
@@ -118,12 +118,12 @@ def input_fn_builder(input_glob, seq_length, is_training, drop_remainder,
                      num_hosts, num_threads=8):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
     name_to_features = {
-        "unique_ids": tf.FixedLenFeature([], tf.int64),
-        "input_ids": tf.FixedLenFeature([seq_length], tf.int64),
-        "input_mask": tf.FixedLenFeature([seq_length], tf.float32),
-        "segment_ids": tf.FixedLenFeature([seq_length], tf.int64),
-        "cls_index": tf.FixedLenFeature([], tf.int64),
-        "p_mask": tf.FixedLenFeature([seq_length], tf.float32)
+        "unique_ids": tf.io.FixedLenFeature([], tf.int64),
+        "input_ids": tf.io.FixedLenFeature([seq_length], tf.int64),
+        "input_mask": tf.io.FixedLenFeature([seq_length], tf.float32),
+        "segment_ids": tf.io.FixedLenFeature([seq_length], tf.int64),
+        "cls_index": tf.io.FixedLenFeature([], tf.int64),
+        "p_mask": tf.io.FixedLenFeature([seq_length], tf.float32)
     }
 
     if is_training:
@@ -131,10 +131,10 @@ def input_fn_builder(input_glob, seq_length, is_training, drop_remainder,
         name_to_features["end_positions"] = tf.FixedLenFeature([], tf.int64)
         name_to_features["is_impossible"] = tf.FixedLenFeature([], tf.float32)
 
-        tf.logging.info("Input tfrecord file glob {}".format(input_glob))
-        global_input_paths = tf.gfile.Glob(input_glob)
-        tf.logging.info("Find {} input paths {}".format(
-            len(global_input_paths), global_input_paths))
+    tf.logging.info("Input tfrecord file glob {}".format(input_glob))
+    global_input_paths = tf.io.gfile.glob(input_glob)
+    tf.logging.info("Find {} input paths {}".format(
+        len(global_input_paths), global_input_paths))
 
     def _decode_record(record, name_to_features):
         """Decodes a record to a TensorFlow example."""
@@ -154,10 +154,10 @@ def input_fn_builder(input_glob, seq_length, is_training, drop_remainder,
         """The actual input function."""
         # if FLAGS.use_tpu:
         #     batch_size = params["batch_size"]
-        # elif is_training:
-        batch_size = model_config['train_batch_size']
-        # else:
-        #     batch_size = FLAGS.predict_batch_size
+        if is_training:
+            batch_size = model_config['train_batch_size']
+        else:
+            batch_size = model_config['predict_batch_size']
 
     # Split tfrecords across hosts
         if num_hosts > 1:
@@ -199,7 +199,7 @@ def input_fn_builder(input_glob, seq_length, is_training, drop_remainder,
                 d = d.shuffle(buffer_size=model_config['shuffle_buffer'])
 
         d = d.apply(
-            tf.contrib.data.map_and_batch(
+            tf.data.experimental.map_and_batch(
                 lambda record: _decode_record(record, name_to_features),
                 batch_size=batch_size,
                 num_parallel_batches=num_threads,
@@ -294,8 +294,9 @@ def get_model_fn():
         #     mode=mode, loss=total_loss, train_op=train_op, host_call=host_call,
         #     scaffold_fn=scaffold_fn)
         # else:
+        logging_hook = tf.train.LoggingTensorHook({"loss" : total_loss}, every_n_iter=10)
         train_spec = tf.estimator.EstimatorSpec(
-            mode=mode, loss=total_loss, train_op=train_op)
+            mode=mode, loss=total_loss, train_op=train_op, training_hooks = [logging_hook])
 
         return train_spec
 

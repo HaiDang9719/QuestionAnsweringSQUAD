@@ -10,14 +10,25 @@ if six.PY2:
 else:
     import pickle
 import collections
-
+import function_builder
+import numpy as np
+import train
+import model_utils
 PRETRAINED_MODEL_DIR_SP = 'xlnet_cased_L-24_H-1024_A-16/spiece.model'
 predict_config = {
     'predict_file':'dev-v2.0.json',
     'output_dir':'',
     'max_seq_length':512,
     'max_query_length':64,
-    'overwrite_data': False
+    'overwrite_data': False,
+    'n_best_size':5,
+    'max_answer_length':64,
+    'doc_stride':128,
+    'predict_dir':'',
+    'start_n_top':5,
+    'end_n_top':5
+
+
 
 }
 RawResult = collections.namedtuple("RawResult",
@@ -67,12 +78,12 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
             # if we could have irrelevant answers, get the min score of irrelevant
             score_null = min(score_null, cur_null_score)
 
-            for i in range(FLAGS.start_n_top):
-                for j in range(FLAGS.end_n_top):
+            for i in range(predict_config['start_n_top']):
+                for j in range(predict_config['end_n_top']):
                     start_log_prob = result.start_top_log_probs[i]
                     start_index = result.start_top_index[i]
 
-                    j_index = i * FLAGS.end_n_top + j
+                    j_index = i * predict_config['end_n_top'] + j
 
                     end_log_prob = result.end_top_log_probs[j_index]
                     end_index = result.end_top_index[j_index]
@@ -194,7 +205,7 @@ def get_model_fn():
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
         #### Get loss from inputs
-        outputs = function_builder.get_qa_outputs(model_config, features, is_training)
+        outputs = function_builder.get_qa_outputs(train.model_config, features, is_training)
 
         #### Check model parameters
         num_params = sum([np.prod(v.shape) for v in tf.trainable_variables()])
@@ -203,26 +214,26 @@ def get_model_fn():
         scaffold_fn = None
 
         #### Evaluation mode
-        if mode == tf.estimator.ModeKeys.PREDICT:
-            if model_config['init_checkpoint']:
-                tf.logging.info("init_checkpoint not being used in predict mode.")
+        # if mode == tf.estimator.ModeKeys.PREDICT:
+        if train.model_config['init_checkpoint']:
+            tf.logging.info("init_checkpoint not being used in predict mode.")
 
-            predictions = {
-                "unique_ids": features["unique_ids"],
-                "start_top_index": outputs["start_top_index"],
-                "start_top_log_probs": outputs["start_top_log_probs"],
-                "end_top_index": outputs["end_top_index"],
-                "end_top_log_probs": outputs["end_top_log_probs"],
-                "cls_logits": outputs["cls_logits"]
-            }
+        predictions = {
+            "unique_ids": features["unique_ids"],
+            "start_top_index": outputs["start_top_index"],
+            "start_top_log_probs": outputs["start_top_log_probs"],
+            "end_top_index": outputs["end_top_index"],
+            "end_top_log_probs": outputs["end_top_log_probs"],
+            "cls_logits": outputs["cls_logits"]
+        }
 
-            # if FLAGS.use_tpu:
-            #     output_spec = tf.contrib.tpu.TPUEstimatorSpec(
-            #     mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
-            # else:
-            output_spec = tf.estimator.EstimatorSpec(
-            mode=mode, predictions=predictions)
-            return output_spec
+        # if FLAGS.use_tpu:
+        #     output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+        #     mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
+        # else:
+        output_spec = tf.estimator.EstimatorSpec(
+        mode=mode, predictions=predictions)
+        return output_spec
 
         ### Compute loss
         seq_length = tf.shape(features["input_ids"])[1]
@@ -252,13 +263,13 @@ def get_model_fn():
         total_loss += regression_loss * 0.5
 
         #### Configuring the optimizer
-        train_op, learning_rate, _ = model_utils.get_train_op(model_config, total_loss)
+        train_op, learning_rate, _ = model_utils.get_train_op(train.model_config, total_loss)
 
         monitor_dict = {}
         monitor_dict["lr"] = learning_rate
 
         #### load pretrained models
-        scaffold_fn = model_utils.init_from_checkpoint(model_config)
+        scaffold_fn = model_utils.init_from_checkpoint(train.model_config)
 
         #### Constucting training TPUEstimatorSpec with new cache.
         # if FLAGS.use_tpu:
@@ -279,6 +290,27 @@ def get_model_fn():
 
     return model_fn
 
+def _compute_softmax(scores):
+    """Compute softmax probability over raw logits."""
+    if not scores:
+        return []
+
+    max_score = None
+    for score in scores:
+        if max_score is None or score > max_score:
+            max_score = score
+
+    exp_scores = []
+    total_sum = 0.0
+    for score in scores:
+        x = math.exp(score - max_score)
+        exp_scores.append(x)
+        total_sum += x
+
+    probs = []
+    for score in exp_scores:
+        probs.append(score / total_sum)
+    return probs
 
 def main(_):
     #TPU
@@ -291,7 +323,7 @@ def main(_):
 
     #GPU
     ### TPU Configuration
-    run_config = configure_tpu()
+    run_config = train.configure_tpu()
     model_fn = get_model_fn()
     estimator = tf.estimator.Estimator(
     model_fn=model_fn,
@@ -313,7 +345,7 @@ def main(_):
         "{}.slen-{}.qlen-{}.eval.features.pkl".format(
             spm_basename, predict_config['max_seq_length'], predict_config['max_query_length']))
 
-    if tf.gfile.Exists(eval_rec_file) and tf.gfile.Exists(eval_feature_file) and not predict_config['overwrite_data']:
+    if tf.io.gfile.exists(eval_rec_file) and tf.io.gfile.exists(eval_feature_file) and not predict_config['overwrite_data']:
         tf.logging.info("Loading eval features from {}".format(eval_feature_file))
         with tf.gfile.Open(eval_feature_file, 'rb') as fin:
             eval_features = pickle.load(fin)
@@ -321,9 +353,10 @@ def main(_):
         eval_writer = preprocessing.FeatureWriter(filename=eval_rec_file, is_training=False)
         eval_features = []
 
-    def append_feature(feature):
-        eval_features.append(feature)
-        eval_writer.process_feature(feature)
+        def append_feature(feature):
+            eval_features.append(feature)
+            eval_writer.process_feature(feature)
+
         preprocessing.convert_examples_to_features(
             examples=eval_examples,
             sp_model=sp_model,
@@ -365,12 +398,12 @@ def main(_):
                 end_top_log_probs=end_top_log_probs,
                 end_top_index=end_top_index,
                 cls_logits=cls_logits))
-    output_prediction_file = os.path.join(FLAGS.predict_dir, "predictions.json")
-    output_nbest_file = os.path.join(FLAGS.predict_dir, "nbest_predictions.json")
-    output_null_log_odds_file = os.path.join(FLAGS.predict_dir, "null_odds.json")
+    output_prediction_file = os.path.join(predict_config['predict_dir'], "predictions.json")
+    output_nbest_file = os.path.join(predict_config['predict_dir'], "nbest_predictions.json")
+    output_null_log_odds_file = os.path.join(predict_config['predict_dir'], "null_odds.json")
 
     ret = write_predictions(eval_examples, eval_features, cur_results,
-                            FLAGS.n_best_size, FLAGS.max_answer_length,
+                            predict_config['n_best_size'], predict_config['max_answer_length'],
                             output_prediction_file,
                             output_nbest_file,
                             output_null_log_odds_file,
