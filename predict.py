@@ -410,12 +410,9 @@ def main(_):
                             output_null_log_odds_file,
                             orig_data)
     # Log current result
-    main_eval = {'best_exact':0,'best_f1':0}
-    main_eval['best_exact'] = 79.6000000
-    main_eval['best_f1'] = 79.230102121
     tf.logging.info("=" * 80)
     log_str = "Result | "
-    for key, val in main_eval.items():
+    for key, val in ret.items():
         log_str += "{} {} | ".format(key, val)
     tf.logging.info(log_str)
     tf.logging.info("=" * 80)
