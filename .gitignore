@@ -105,6 +105,7 @@ venv.bak/
 
 
 #folder 
+RACE/
 experiment/
 proc_data/
 xlnet_cased_L-24_H-1024_A-16/

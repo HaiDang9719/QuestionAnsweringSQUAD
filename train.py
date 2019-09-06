@@ -20,7 +20,7 @@ PRETRAINED_MODEL_DIR_SP = 'xlnet_cased_L-24_H-1024_A-16/spiece.model'
 OUTPUT_DIR = 'proc_data/squad'
 PROC_ID = 0
 NUM_PROC = 1
-MAX_SEQ_LENGTH = 512
+MAX_SEQ_LENGTH = 256
 MAX_QUERY_LENGTH = 64
 TRAIN_FILE = 'train-v2.0.json'
 DOC_STRIDE = 128
@@ -35,7 +35,7 @@ model_config = {
     "num_hosts":1,
     "max_save":5,
     "save_steps":1000,
-    "max_seq_length":512,
+    "max_seq_length":128,
     "max_query_length":64,
     "train_batch_size":8,
     'predict_batch_size':32,
@@ -82,7 +82,7 @@ def configure_tpu():
     tpu_cluster = None
     master = None
 
-    session_config = tf.ConfigProto()
+    session_config = tf.ConfigProto(allow_soft_placement=True)
     # Uncomment the following line if you hope to monitor GPU RAM growth
     session_config.gpu_options.allow_growth = True
 
@@ -225,26 +225,26 @@ def get_model_fn():
         scaffold_fn = None
 
         #### Evaluation mode
-        if mode == tf.estimator.ModeKeys.PREDICT:
-            if model_config['init_checkpoint']:
-                tf.logging.info("init_checkpoint not being used in predict mode.")
+        # if mode == tf.estimator.ModeKeys.PREDICT:
+        #     if model_config['init_checkpoint']:
+        #         tf.logging.info("init_checkpoint not being used in predict mode.")
 
-            predictions = {
-                "unique_ids": features["unique_ids"],
-                "start_top_index": outputs["start_top_index"],
-                "start_top_log_probs": outputs["start_top_log_probs"],
-                "end_top_index": outputs["end_top_index"],
-                "end_top_log_probs": outputs["end_top_log_probs"],
-                "cls_logits": outputs["cls_logits"]
-            }
+        #     predictions = {
+        #         "unique_ids": features["unique_ids"],
+        #         "start_top_index": outputs["start_top_index"],
+        #         "start_top_log_probs": outputs["start_top_log_probs"],
+        #         "end_top_index": outputs["end_top_index"],
+        #         "end_top_log_probs": outputs["end_top_log_probs"],
+        #         "cls_logits": outputs["cls_logits"]
+        #     }
 
-            # if FLAGS.use_tpu:
-            #     output_spec = tf.contrib.tpu.TPUEstimatorSpec(
-            #     mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
-            # else:
-            output_spec = tf.estimator.EstimatorSpec(
-            mode=mode, predictions=predictions)
-            return output_spec
+        #     # if FLAGS.use_tpu:
+        #     #     output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+        #     #     mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
+        #     # else:
+        #     output_spec = tf.estimator.EstimatorSpec(
+        #         mode=mode, predictions=predictions)
+        #     return output_spec
 
         ### Compute loss
         seq_length = tf.shape(features["input_ids"])[1]
@@ -303,6 +303,8 @@ def get_model_fn():
     return model_fn
 
 def main(_):
+    
+
     sp_model = spm.SentencePieceProcessor()
     sp_model.Load(PRETRAINED_MODEL_DIR_SP)
 
@@ -322,8 +324,8 @@ def main(_):
 
     #GPU
     estimator = tf.estimator.Estimator(
-    model_fn=model_fn,
-    config=run_config)
+        model_fn=model_fn,
+        config=run_config)
 
     
     train_rec_glob = os.path.join(

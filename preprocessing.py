@@ -31,7 +31,8 @@ import squad_utils
 from data_utils import SEP_ID, CLS_ID, VOCAB_SIZE
 
 SPIECE_UNDERLINE = u'▁'
-
+#CLS Classification token
+#SEP Seperate token
 SEG_ID_P   = 0
 SEG_ID_Q   = 1
 SEG_ID_CLS = 2
@@ -41,7 +42,7 @@ PRETRAINED_MODEL_DIR_SP = 'xlnet_cased_L-24_H-1024_A-16/spiece.model'
 OUTPUT_DIR = ''
 PROC_ID = 0
 NUM_PROC = 1
-MAX_SEQ_LENGTH = 512
+MAX_SEQ_LENGTH = 128
 MAX_QUERY_LENGTH = 64
 TRAIN_FILE = 'train-v2.0.json'
 DOC_STRIDE = 128
@@ -632,7 +633,7 @@ def main(_):
 
     tf.logging.info("Read examples from {}".format(TRAIN_FILE))
     train_examples = read_squad_examples(TRAIN_FILE, is_training=True)
-    train_examples = train_examples[PROC_ID::NUM_PROC]
+    # train_examples = train_examples[PROC_ID::NUM_PROC]
 
     # Pre-shuffle the input to avoid having to make a very large shuffle
     # buffer in the `input_fn`.
@@ -642,6 +643,7 @@ def main(_):
     train_writer = FeatureWriter(
         filename=train_rec_file,
         is_training=True)
+
     convert_examples_to_features(
         examples=train_examples,
         sp_model=sp_model,

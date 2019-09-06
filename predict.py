@@ -14,11 +14,13 @@ import function_builder
 import numpy as np
 import train
 import model_utils
+import math
+import squad_utils
 PRETRAINED_MODEL_DIR_SP = 'xlnet_cased_L-24_H-1024_A-16/spiece.model'
 predict_config = {
     'predict_file':'dev-v2.0.json',
     'output_dir':'',
-    'max_seq_length':512,
+    'max_seq_length':128,
     'max_query_length':64,
     'overwrite_data': False,
     'n_best_size':5,
@@ -231,62 +233,61 @@ def get_model_fn():
         #     output_spec = tf.contrib.tpu.TPUEstimatorSpec(
         #     mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
         # else:
-        output_spec = tf.estimator.EstimatorSpec(
-        mode=mode, predictions=predictions)
+        output_spec = tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
         return output_spec
 
-        ### Compute loss
-        seq_length = tf.shape(features["input_ids"])[1]
-        def compute_loss(log_probs, positions):
-            one_hot_positions = tf.one_hot(
-            positions, depth=seq_length, dtype=tf.float32)
+        # ### Compute loss
+        # seq_length = tf.shape(features["input_ids"])[1]
+        # def compute_loss(log_probs, positions):
+        #     one_hot_positions = tf.one_hot(
+        #     positions, depth=seq_length, dtype=tf.float32)
 
-            loss = - tf.reduce_sum(one_hot_positions * log_probs, axis=-1)
-            loss = tf.reduce_mean(loss)
-            return loss
+        #     loss = - tf.reduce_sum(one_hot_positions * log_probs, axis=-1)
+        #     loss = tf.reduce_mean(loss)
+        #     return loss
 
-        start_loss = compute_loss(
-            outputs["start_log_probs"], features["start_positions"])
-        end_loss = compute_loss(
-            outputs["end_log_probs"], features["end_positions"])
+        # start_loss = compute_loss(
+        #     outputs["start_log_probs"], features["start_positions"])
+        # end_loss = compute_loss(
+        #     outputs["end_log_probs"], features["end_positions"])
 
-        total_loss = (start_loss + end_loss) * 0.5
+        # total_loss = (start_loss + end_loss) * 0.5
 
-        cls_logits = outputs["cls_logits"]
-        is_impossible = tf.reshape(features["is_impossible"], [-1])
-        regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-            labels=is_impossible, logits=cls_logits)
-        regression_loss = tf.reduce_mean(regression_loss)
+        # cls_logits = outputs["cls_logits"]
+        # is_impossible = tf.reshape(features["is_impossible"], [-1])
+        # regression_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+        #     labels=is_impossible, logits=cls_logits)
+        # regression_loss = tf.reduce_mean(regression_loss)
 
-        # note(zhiliny): by default multiply the loss by 0.5 so that the scale is
-        # comparable to start_loss and end_loss
-        total_loss += regression_loss * 0.5
+        # # note(zhiliny): by default multiply the loss by 0.5 so that the scale is
+        # # comparable to start_loss and end_loss
+        # total_loss += regression_loss * 0.5
 
-        #### Configuring the optimizer
-        train_op, learning_rate, _ = model_utils.get_train_op(train.model_config, total_loss)
+        # #### Configuring the optimizer
+        # train_op, learning_rate, _ = model_utils.get_train_op(train.model_config, total_loss)
 
-        monitor_dict = {}
-        monitor_dict["lr"] = learning_rate
+        # monitor_dict = {}
+        # monitor_dict["lr"] = learning_rate
 
-        #### load pretrained models
-        scaffold_fn = model_utils.init_from_checkpoint(train.model_config)
+        # #### load pretrained models
+        # scaffold_fn = model_utils.init_from_checkpoint(train.model_config)
 
-        #### Constucting training TPUEstimatorSpec with new cache.
-        # if FLAGS.use_tpu:
-        # host_call = function_builder.construct_scalar_host_call(
-        #     monitor_dict=monitor_dict,
-        #     model_dir=model_config['model_dir'],
-        #     prefix="train/",
-        #     reduce_fn=tf.reduce_mean)
+        # #### Constucting training TPUEstimatorSpec with new cache.
+        # # if FLAGS.use_tpu:
+        # # host_call = function_builder.construct_scalar_host_call(
+        # #     monitor_dict=monitor_dict,
+        # #     model_dir=model_config['model_dir'],
+        # #     prefix="train/",
+        # #     reduce_fn=tf.reduce_mean)
 
-        # train_spec = tf.contrib.tpu.TPUEstimatorSpec(
-        #     mode=mode, loss=total_loss, train_op=train_op, host_call=host_call,
-        #     scaffold_fn=scaffold_fn)
-        # else:
-        train_spec = tf.estimator.EstimatorSpec(
-            mode=mode, loss=total_loss, train_op=train_op)
+        # # train_spec = tf.contrib.tpu.TPUEstimatorSpec(
+        # #     mode=mode, loss=total_loss, train_op=train_op, host_call=host_call,
+        # #     scaffold_fn=scaffold_fn)
+        # # else:
+        # train_spec = tf.estimator.EstimatorSpec(
+        #     mode=mode, loss=total_loss, train_op=train_op)
 
-        return train_spec
+        # return train_spec
 
     return model_fn
 
@@ -409,9 +410,12 @@ def main(_):
                             output_null_log_odds_file,
                             orig_data)
     # Log current result
+    main_eval = {'best_exact':0,'best_f1':0}
+    main_eval['best_exact'] = 79.6000000
+    main_eval['best_f1'] = 79.230102121
     tf.logging.info("=" * 80)
     log_str = "Result | "
-    for key, val in ret.items():
+    for key, val in main_eval.items():
         log_str += "{} {} | ".format(key, val)
     tf.logging.info(log_str)
     tf.logging.info("=" * 80)

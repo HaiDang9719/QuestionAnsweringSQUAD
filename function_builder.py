@@ -353,7 +353,7 @@ def get_qa_outputs(model_config, features, is_training):
   return return_dict
 
 
-def get_race_loss(FLAGS, features, is_training):
+def get_race_loss(model_config, features, is_training):
   """Loss for downstream multi-choice QA tasks such as RACE."""
 
   bsz_per_core = tf.shape(features["input_ids"])[0]
@@ -368,9 +368,8 @@ def get_race_loss(FLAGS, features, is_training):
   seg_id = _transform_features(features["segment_ids"])
   inp_mask = _transform_features(features["input_mask"])
   label = tf.reshape(features["label_ids"], [bsz_per_core])
-
-  xlnet_config = xlnet.XLNetConfig(json_path=FLAGS.model_config_path)
-  run_config = xlnet.create_run_config(is_training, True, FLAGS)
+  xlnet_config = xlnet.XLNetConfig(json_path=model_config['model_config_path'])
+  run_config = xlnet.create_run_config(is_training, True, model_config)
 
   xlnet_model = xlnet.XLNetModel(
       xlnet_config=xlnet_config,
@@ -378,7 +377,7 @@ def get_race_loss(FLAGS, features, is_training):
       input_ids=inp,
       seg_ids=seg_id,
       input_mask=inp_mask)
-  summary = xlnet_model.get_pooled_out(FLAGS.summary_type, FLAGS.use_summ_proj)
+  summary = xlnet_model.get_pooled_out(model_config['summary_type'], model_config['use_summ_proj'])
 
   with tf.variable_scope("logits"):
     logits = tf.layers.dense(summary, 1,
