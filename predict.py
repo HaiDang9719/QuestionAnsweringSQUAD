@@ -20,7 +20,7 @@ PRETRAINED_MODEL_DIR_SP = 'xlnet_cased_L-24_H-1024_A-16/spiece.model'
 predict_config = {
     'predict_file':'dev-v2.0.json',
     'output_dir':'',
-    'max_seq_length':128,
+    'max_seq_length':256,
     'max_query_length':64,
     'overwrite_data': False,
     'n_best_size':5,

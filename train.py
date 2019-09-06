@@ -35,7 +35,7 @@ model_config = {
     "num_hosts":1,
     "max_save":5,
     "save_steps":1000,
-    "max_seq_length":128,
+    "max_seq_length":256,
     "max_query_length":64,
     "train_batch_size":8,
     'predict_batch_size':32,
